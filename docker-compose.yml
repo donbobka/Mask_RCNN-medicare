@@ -9,5 +9,11 @@ x-app: &app
     - '../in:/in'
 
 services:
+  jupyter:
+    <<: *app
+    ports:
+      - '8888:8888'
+    command: jupyter notebook --ip 0.0.0.0 --no-browser --allow-root
+
   dev-cli:
     <<: *app

@@ -1,7 +1,11 @@
 FROM nvidia/cuda:9.2-cudnn7-devel as base
 
 RUN apt-get update && apt-get install -y \
-    python3 python3-pip
+    python3 python3-pip \
+    libglib2.0-0 \
+    libsm6 \
+    libxrender1 \
+    libxext6
 
 WORKDIR /app
 
