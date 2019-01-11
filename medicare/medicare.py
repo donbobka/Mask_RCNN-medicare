@@ -108,6 +108,29 @@ class MedicareDataset(utils.Dataset):
         else:
             super(self.__class__, self).image_reference(image_id)
 
+
+def train(model):
+    """Train the model."""
+    # Training dataset.
+    dataset_train = MedicareDataset()
+    dataset_train.load_medicare(args.dataset, "train")
+    dataset_train.prepare()
+
+    # Validation dataset
+    dataset_val = MedicareDataset()
+    dataset_val.load_medicare(args.dataset, "val")
+    dataset_val.prepare()
+
+    # *** This training schedule is an example. Update to your needs ***
+    # Since we're using a very small dataset, and starting from
+    # COCO trained weights, we don't need to train too long. Also,
+    # no need to train all layers, just the heads should do it.
+    print("Training network heads")
+    model.train(dataset_train, dataset_val,
+                learning_rate=config.LEARNING_RATE,
+                epochs=30,
+                layers='heads')
+
 ############################################################
 #  Training
 ############################################################
