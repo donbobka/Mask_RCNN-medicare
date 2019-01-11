@@ -143,9 +143,9 @@ if __name__ == '__main__':
 
     # Configurations
     if args.command == "train":
-        config = BalloonConfig()
+        config = MedicareConfig()
     else:
-        class InferenceConfig(BalloonConfig):
+        class InferenceConfig(MedicareConfig):
             # Set batch size to 1 since we'll be running inference on
             # one image at a time. Batch size = GPU_COUNT * IMAGES_PER_GPU
             GPU_COUNT = 1
