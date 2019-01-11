@@ -1,0 +1,13 @@
+version: '3.7'
+
+x-app: &app
+  build:
+    context: .
+    target: base
+  volumes:
+    - '.:/app:cached'
+    - '../in:/in'
+
+services:
+  dev-cli:
+    <<: *app
