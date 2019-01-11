@@ -15,6 +15,7 @@ import math
 import random
 import numpy as np
 import cv2
+import skimage.io
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../")
@@ -65,11 +66,12 @@ class MedicareDataset(utils.Dataset):
         image_ids = next(os.walk(dataset_dir))[2]
 
         # Add images
-        for image_id in image_ids:
+        for image_filename in image_ids:
+            image_id = os.path.splitext(image_filename)[0]
             self.add_image(
                 "medicare",
                 image_id=image_id,
-                path=os.path.join(dataset_dir, image_id))
+                path=os.path.join(dataset_dir, image_filename))
 
     def load_mask(self, image_id):
         """Generate instance masks for an image.
@@ -84,7 +86,7 @@ class MedicareDataset(utils.Dataset):
 
         # Read mask files from .png image
         mask = []
-        m = skimage.io.imread(os.path.join(mask_dir, image_id)).astype(np.bool)
+        m = skimage.io.imread(os.path.join(mask_dir, "{}.png".format(info['id']))).astype(np.bool)
         mask.append(m)
         
         mask = np.stack(mask, axis=-1)
