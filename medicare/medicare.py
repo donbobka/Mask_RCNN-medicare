@@ -44,16 +44,13 @@ class MedicareConfig(Config):
     # Train on 1 GPU and 8 images per GPU. We can put multiple images on each
     # GPU because the images are small. Batch size is 8 (GPUs * images/GPU).
     GPU_COUNT = 1
-    IMAGES_PER_GPU = 8
+    
+    IMAGES_PER_GPU = 2
+    IMAGE_MIN_DIM = 512
+    IMAGE_MAX_DIM = 512
 
     # Number of classes (including background)
     NUM_CLASSES = 1 + 1  # background + 1 shapes
-
-    # Use a small epoch since the data is simple
-    STEPS_PER_EPOCH = 100
-
-    # use small validation steps since the epoch is small
-    VALIDATION_STEPS = 5
 
 class MedicareDataset(utils.Dataset):
     def load_medicare(self, dataset_dir, subset):
