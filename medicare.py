@@ -18,6 +18,7 @@ import cv2
 import skimage.io
 import skimage.transform
 from scipy.spatial import distance as dist
+import imgaug as ia
 from imgaug import augmenters as iaa
 import glob
 import json
@@ -60,6 +61,17 @@ class MedicareConfig(Config):
     # Number of classes (including background)
     NUM_CLASSES = 1 + 1  # background + 1 shapes
 
+    def augumentations(self):
+        return iaa.SomeOf((0, 5), [
+                iaa.Fliplr(0.5),
+                iaa.Flipud(0.5),
+                iaa.Affine(rotate=(-180, 180)),
+                iaa.Affine(shear=(-16, 16)),
+                iaa.Multiply((0.8, 1.5)),
+                iaa.GaussianBlur(sigma=(0.0, 5.0)),
+                iaa.Crop(percent=(0, 0.25))
+            ])
+
 class MedicareInferenceConfig(MedicareConfig):
     IMAGES_PER_GPU = 1
 
@@ -101,16 +113,15 @@ class MedicareDataset(utils.Dataset):
         # Naming the dataset nucleus, and the class nucleus
         self.add_class("medicare", 1, "medicare")
 
-        dataset_dir = os.path.join(dataset_dir, subset, '*.json')
-        image_ids = next(os.walk(dataset_dir))[2]
-
+        dataset_dir = os.path.join(dataset_dir, subset)
+        
         # Add images
-        for annonation_filename in glob.iglob(dataset_dir):
+        for annonation_filename in glob.iglob(os.path.join(dataset_dir, '*.json')):
             json_file = open(annonation_filename, 'r')
             annotation = json.load(json_file)
             json_file.close
 
-            image_id = os.path.splitext(image_filename)[0]
+            image_id = os.path.splitext(os.path.basename(annonation_filename))[0]
             self.add_image(
                 "medicare",
                 image_id=image_id,
@@ -125,8 +136,8 @@ class MedicareDataset(utils.Dataset):
         class_ids: a 1D array of class IDs of the instance masks.
         """
         info = self.image_info[image_id]
-        if 'annotation' in info
-            return self.load_mask_from_annotation(image_id)
+        if 'annotation' in info:
+            return self.load_annotation_mask_for_image(image_id)
         return self.load_image_mask_for_image(image_id)
         
 
@@ -160,11 +171,10 @@ class MedicareDataset(utils.Dataset):
         mask = np.zeros([height, width, 1], dtype=np.uint8)
         for i, shape in enumerate(shapes):
             if shape['shape_type'] == 'polygon':
-                mask[:, :, i:i + 1] = cv2.fillPoly(mask[:, :, i:i + 1].copy(), [shape['points']], (255,255,255))
+                points = np.array([shape['points']], dtype=np.int32)
+                mask[:, :, i:i + 1] = cv2.fillPoly(mask[:, :, i:i + 1].copy(), points, (255,255,255))
 
-        # Map class names to class IDs.
-        class_ids = np.array([self.class_names.index(s[0]) for s in shapes])
-        return mask, class_ids.astype(np.int32)
+        return mask, np.ones([mask.shape[-1]], dtype=np.int32)
 
     def image_reference(self, image_id):
         """Return the path of the image."""
@@ -187,16 +197,6 @@ def train(model):
     dataset_val.load_medicare(args.dataset, "val")
     dataset_val.prepare()
 
-    augmentation = iaa.SomeOf((0, 5), [
-        iaa.Fliplr(0.5),
-        iaa.Flipud(0.5),
-        iaa.Affine(rotate=(-180, 180)),
-        iaa.Affine(shear=(-16, 16)),
-        iaa.Multiply((0.8, 1.5)),
-        iaa.GaussianBlur(sigma=(0.0, 5.0)),
-        iaa.CropAndPad(percent=(-0.25, 0.25), pad_mode=ia.ALL, pad_cval=(0, 255))
-    ])
-
     # *** This training schedule is an example. Update to your needs ***
     # Since we're using a very small dataset, and starting from
     # COCO trained weights, we don't need to train too long. Also,
@@ -205,14 +205,14 @@ def train(model):
     model.train(dataset_train, dataset_val,
                 learning_rate=config.LEARNING_RATE,
                 epochs=20,
-                augmentation=augmentation,
+                augmentation=config.augumentations(),
                 layers='heads')
 
     print("Train all layers")
     model.train(dataset_train, dataset_val,
                 learning_rate=config.LEARNING_RATE,
                 epochs=40,
-                augmentation=augmentation,
+                augmentation=config.augumentations(),
                 layers='all')
 
 def order_points(pts):
