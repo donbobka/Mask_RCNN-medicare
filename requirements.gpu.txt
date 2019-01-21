@@ -1,0 +1,4 @@
+-r requirements.common.txt
+
+tensorflow-gpu>=1.3.0
+

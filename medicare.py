@@ -16,15 +16,17 @@ import random
 import numpy as np
 import cv2
 import skimage.io
+import skimage.transform
+from scipy.spatial import distance as dist
 from imgaug import augmenters as iaa
-
-# Root directory of the project
-ROOT_DIR = os.path.abspath("../")
+import glob
+import json
 
 # Import Mask RCNN
-sys.path.append(ROOT_DIR)  # To find local version of the library
 from mrcnn.config import Config
 from mrcnn import model as modellib, utils
+
+ROOT_DIR='./'
 
 # Path to trained weights file
 COCO_WEIGHTS_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.h5")
@@ -49,8 +51,17 @@ class MedicareConfig(Config):
     IMAGE_MIN_DIM = 512
     IMAGE_MAX_DIM = 512
 
+    # Number of training steps per epoch
+    STEPS_PER_EPOCH = 100
+
+    # Skip detections with < 90% confidence
+    DETECTION_MIN_CONFIDENCE = 0.9
+
     # Number of classes (including background)
     NUM_CLASSES = 1 + 1  # background + 1 shapes
+
+class MedicareInferenceConfig(MedicareConfig):
+    IMAGES_PER_GPU = 1
 
 class MedicareDataset(utils.Dataset):
     def load_medicare(self, dataset_dir, subset):
@@ -77,6 +88,35 @@ class MedicareDataset(utils.Dataset):
                 image_id=image_id,
                 path=os.path.join(dataset_dir, image_filename))
 
+    def load_labelme_medicare(self, dataset_dir, subset):
+        """Load a subset of the medicare dataset.
+
+        dataset_dir: Root directory of the dataset
+        subset: Subset to load. Either the name of the sub-directory,
+                such as stage1_train, stage1_test, ...etc. or, one of:
+                * train: stage1_train excluding validation images
+                * val: validation images from VAL_IMAGE_IDS
+        """
+        # Add classes. We have one class.
+        # Naming the dataset nucleus, and the class nucleus
+        self.add_class("medicare", 1, "medicare")
+
+        dataset_dir = os.path.join(dataset_dir, subset, '*.json')
+        image_ids = next(os.walk(dataset_dir))[2]
+
+        # Add images
+        for annonation_filename in glob.iglob(dataset_dir):
+            json_file = open(annonation_filename, 'r')
+            annotation = json.load(json_file)
+            json_file.close
+
+            image_id = os.path.splitext(image_filename)[0]
+            self.add_image(
+                "medicare",
+                image_id=image_id,
+                path=os.path.join(dataset_dir, annotation['imagePath']),
+                annotation=annotation)
+
     def load_mask(self, image_id):
         """Generate instance masks for an image.
        Returns:
@@ -85,18 +125,46 @@ class MedicareDataset(utils.Dataset):
         class_ids: a 1D array of class IDs of the instance masks.
         """
         info = self.image_info[image_id]
+        if 'annotation' in info
+            return self.load_mask_from_annotation(image_id)
+        return self.load_image_mask_for_image(image_id)
+        
+
+    def load_image_mask_for_image(self, image_id):
+        info = self.image_info[image_id]
         # Get mask directory from image path
         mask_dir = os.path.join(os.path.dirname(os.path.dirname(info['path'])), "masks")
 
-        # Read mask files from .png image
+        image_mask_path = os.path.join(mask_dir, "{}.png".format(info['id']))
+        if not os.path.isfile(image_mask_path):
+            return None
+
         mask = []
-        m = skimage.io.imread(os.path.join(mask_dir, "{}.png".format(info['id']))).astype(np.bool)
+        m = skimage.io.imread(image_mask_path).astype(np.bool)
         mask.append(m)
         
         mask = np.stack(mask, axis=-1)
         # Return mask, and array of class IDs of each instance. Since we have
         # one class ID, we return an array of ones
         return mask, np.ones([mask.shape[-1]], dtype=np.int32)
+
+    def load_annotation_mask_for_image(self, image_id):
+        """Generate instance masks for shapes of the given image ID.
+        """
+        info = self.image_info[image_id]
+        shapes = info['annotation']['shapes']
+        width = info['annotation']['imageWidth']
+        height = info['annotation']['imageHeight']
+
+        # We have only one mask, because we have only medicare class
+        mask = np.zeros([height, width, 1], dtype=np.uint8)
+        for i, shape in enumerate(shapes):
+            if shape['shape_type'] == 'polygon':
+                mask[:, :, i:i + 1] = cv2.fillPoly(mask[:, :, i:i + 1].copy(), [shape['points']], (255,255,255))
+
+        # Map class names to class IDs.
+        class_ids = np.array([self.class_names.index(s[0]) for s in shapes])
+        return mask, class_ids.astype(np.int32)
 
     def image_reference(self, image_id):
         """Return the path of the image."""
@@ -119,14 +187,14 @@ def train(model):
     dataset_val.load_medicare(args.dataset, "val")
     dataset_val.prepare()
 
-    augmentation = iaa.SomeOf((0, 2), [
+    augmentation = iaa.SomeOf((0, 5), [
         iaa.Fliplr(0.5),
         iaa.Flipud(0.5),
-        iaa.OneOf([iaa.Affine(rotate=90),
-                   iaa.Affine(rotate=180),
-                   iaa.Affine(rotate=270)]),
+        iaa.Affine(rotate=(-180, 180)),
+        iaa.Affine(shear=(-16, 16)),
         iaa.Multiply((0.8, 1.5)),
-        iaa.GaussianBlur(sigma=(0.0, 5.0))
+        iaa.GaussianBlur(sigma=(0.0, 5.0)),
+        iaa.CropAndPad(percent=(-0.25, 0.25), pad_mode=ia.ALL, pad_cval=(0, 255))
     ])
 
     # *** This training schedule is an example. Update to your needs ***
@@ -146,6 +214,86 @@ def train(model):
                 epochs=40,
                 augmentation=augmentation,
                 layers='all')
+
+def order_points(pts):
+    # sort the points based on their x-coordinates
+    xSorted = pts[np.argsort(pts[:, 0]), :]
+ 
+    # grab the left-most and right-most points from the sorted
+    # x-roodinate points
+    leftMost = xSorted[:2, :]
+    rightMost = xSorted[2:, :]
+ 
+    # now, sort the left-most coordinates according to their
+    # y-coordinates so we can grab the top-left and bottom-left
+    # points, respectively
+    leftMost = leftMost[np.argsort(leftMost[:, 1]), :]
+    (tl, bl) = leftMost
+ 
+    # now that we have the top-left coordinate, use it as an
+    # anchor to calculate the Euclidean distance between the
+    # top-left and right-most points; by the Pythagorean
+    # theorem, the point with the largest distance will be
+    # our bottom-right point
+    D = dist.cdist(tl[np.newaxis], rightMost, "euclidean")[0]
+    (br, tr) = rightMost[np.argsort(D)[::-1], :]
+ 
+    # return the coordinates in top-left, top-right,
+    # bottom-right, and bottom-left order
+    return np.array([tl, tr, br, bl], dtype="float32")
+
+def crop_rotated_rect(orig, rotated_rect):
+    tl, dim, angle = rotated_rect
+    width, height = dim
+    
+    rect_pts = order_points(cv2.boxPoints(rotated_rect))
+    rect_pts= np.roll(rect_pts, 1, axis=0)
+    
+    # now that we have our rectangle of points, let's compute
+    # the width of our new image
+    (tl, tr, br, bl) = rect_pts
+    widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
+    widthB = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
+
+    # ...and now for the height of our new image
+    heightA = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
+    heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
+
+    # take the maximum of the width and height values to reach
+    # our final dimensions
+    maxWidth = max(int(widthA), int(widthB))
+    maxHeight = max(int(heightA), int(heightB))
+
+    # construct our destination points which will be used to
+    # map the screen to a top-down, "birds eye" view
+    dst = np.array([
+        [0, 0],
+        [maxWidth, 0],
+        [maxWidth, maxHeight],
+        [0, maxHeight]], dtype = "float32")
+    
+    # calculate the perspective transform matrix and warp
+    # the perspective to grab the screen
+    M = cv2.getPerspectiveTransform(rect_pts, dst)
+    warp = cv2.warpPerspective(orig, M, (int(maxWidth), int(maxHeight)))
+
+    if maxWidth < maxHeight:
+        warp = skimage.transform.rotate(warp, 90, resize=True)
+
+    return warp
+
+def crop_medicare(model, image):
+    # Detect objects
+    r = model.detect([image], verbose=1)[0]
+
+    if r["masks"].shape[2] == 0:
+        return None
+    
+    mask = r["masks"][:, :, 0]
+    mask_image = np.array(np.uint8(mask * 255))
+    contours, hierarchy = cv2.findContours(mask_image, 1, 2)
+    rotated_rect = cv2.minAreaRect(contours[0])
+    return crop_rotated_rect(image, rotated_rect)
 
 ############################################################
 #  Training

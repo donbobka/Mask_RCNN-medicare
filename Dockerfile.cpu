@@ -1,0 +1,6 @@
+FROM python:3.6 as base
+
+WORKDIR /app
+
+COPY requirements.common.txt requirements.cpu.txt requirements.lambda.txt /app/
+RUN pip3 install -r requirements.cpu.txt -r ./requirements.lambda.txt

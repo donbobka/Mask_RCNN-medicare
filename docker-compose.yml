@@ -3,10 +3,16 @@ version: '3.7'
 x-app: &app
   build:
     context: .
+    dockerfile: Dockerfile.${CPU_GPU:-cpu}
     target: base
   volumes:
     - '.:/app:cached'
     - '../in:/in'
+  environment:
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+    - AWS_SESSION_TOKEN
+    - AWS_SECURITY_TOKEN
 
 services:
   jupyter:

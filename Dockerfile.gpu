@@ -9,5 +9,5 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-COPY requirements.txt /app/requirements.txt
-RUN pip3 install -r requirements.txt
+COPY requirements.common.txt requirements.gpu.txt requirements.lambda.txt /app/
+RUN pip3 install -r requirements.gpu.txt -r ./requirements.lambda.txt
