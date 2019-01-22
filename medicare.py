@@ -315,7 +315,7 @@ if __name__ == '__main__':
                         metavar="<command>",
                         help="'train' or 'splash'")
     parser.add_argument('--dataset-type', required=False,
-                        default='default'
+                        default='default',
                         metavar='default|labelme',
                         help='Directory of the Balloon dataset')
     parser.add_argument('--dataset', required=False,
