@@ -203,23 +203,28 @@ def train(model):
         dataset_val.load_labelme_medicare(args.dataset, "val")
     dataset_val.prepare()
 
-    # *** This training schedule is an example. Update to your needs ***
-    # Since we're using a very small dataset, and starting from
-    # COCO trained weights, we don't need to train too long. Also,
-    # no need to train all layers, just the heads should do it.
-    print("Training network heads")
-    model.train(dataset_train, dataset_val,
-                learning_rate=config.LEARNING_RATE,
-                epochs=20,
-                augmentation=config.augumentations(),
-                layers='heads')
+    if args.layers is None:
+        print("Training network heads")
+        model.train(dataset_train, dataset_val,
+                    learning_rate=config.LEARNING_RATE,
+                    epochs=20,
+                    augmentation=config.augumentations(),
+                    layers='heads')
 
-    print("Train all layers")
-    model.train(dataset_train, dataset_val,
-                learning_rate=config.LEARNING_RATE,
-                epochs=40,
-                augmentation=config.augumentations(),
-                layers='all')
+        print("Train all layers")
+        model.train(dataset_train, dataset_val,
+                    learning_rate=config.LEARNING_RATE,
+                    epochs=40,
+                    augmentation=config.augumentations(),
+                    layers='all')
+    else:
+        print("Training network {}".format(args.layers))
+        model.train(dataset_train, dataset_val,
+                    learning_rate=config.LEARNING_RATE,
+                    epochs=args.epochs,
+                    augmentation=config.augumentations(),
+                    layers=args.layers)
+
 
 def order_points(pts):
     # sort the points based on their x-coordinates
@@ -317,7 +322,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset-type', required=False,
                         default='default',
                         metavar='default|labelme',
-                        help='Directory of the Balloon dataset')
+                        help='Dataset type')
     parser.add_argument('--dataset', required=False,
                         metavar="/path/to/balloon/dataset/",
                         help='Directory of the Balloon dataset')
@@ -328,6 +333,14 @@ if __name__ == '__main__':
                         default=DEFAULT_LOGS_DIR,
                         metavar="/path/to/logs/",
                         help='Logs and checkpoints directory (default=logs/)')
+    parser.add_argument('--layers', required=False,
+                        default=None,
+                        metavar="heads|all",
+                        help='What layers to train')
+    parser.add_argument('--epochs', required=False,
+                        default=20,
+                        metavar="<number>",
+                        help='Number of epochs')
     args = parser.parse_args()
 
     # Validate arguments
