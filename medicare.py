@@ -337,8 +337,8 @@ if __name__ == '__main__':
                         default=None,
                         metavar="heads|all",
                         help='What layers to train')
-    parser.add_argument('--epochs', required=False,
-                        default=20,
+    parser.add_argument('--epochs', type=int, required=False,
+                        default=20, 
                         metavar="<number>",
                         help='Number of epochs')
     args = parser.parse_args()
