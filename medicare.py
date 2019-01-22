@@ -189,12 +189,18 @@ def train(model):
     """Train the model."""
     # Training dataset.
     dataset_train = MedicareDataset()
-    dataset_train.load_medicare(args.dataset, "train")
+    if args.dataset_type == 'default':
+        dataset_train.load_medicare(args.dataset, "train")
+    elif args.dataset_type == 'labelme':
+        dataset_train.load_labelme_medicare(args.dataset, "train")
     dataset_train.prepare()
 
     # Validation dataset
     dataset_val = MedicareDataset()
-    dataset_val.load_medicare(args.dataset, "val")
+    if args.dataset_type == 'default':
+        dataset_train.load_medicare(args.dataset, "val")
+    elif args.dataset_type == 'labelme':
+        dataset_train.load_labelme_medicare(args.dataset, "val")
     dataset_val.prepare()
 
     # *** This training schedule is an example. Update to your needs ***
@@ -308,6 +314,10 @@ if __name__ == '__main__':
     parser.add_argument("command",
                         metavar="<command>",
                         help="'train' or 'splash'")
+    parser.add_argument('--dataset-type', required=False,
+                        default='default'
+                        metavar='default|labelme',
+                        help='Directory of the Balloon dataset')
     parser.add_argument('--dataset', required=False,
                         metavar="/path/to/balloon/dataset/",
                         help='Directory of the Balloon dataset')
