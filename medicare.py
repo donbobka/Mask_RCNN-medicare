@@ -198,9 +198,9 @@ def train(model):
     # Validation dataset
     dataset_val = MedicareDataset()
     if args.dataset_type == 'default':
-        dataset_train.load_medicare(args.dataset, "val")
+        dataset_val.load_medicare(args.dataset, "val")
     elif args.dataset_type == 'labelme':
-        dataset_train.load_labelme_medicare(args.dataset, "val")
+        dataset_val.load_labelme_medicare(args.dataset, "val")
     dataset_val.prepare()
 
     # *** This training schedule is an example. Update to your needs ***
